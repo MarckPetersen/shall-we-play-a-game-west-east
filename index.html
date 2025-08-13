@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Shall We Play A Game? — West vs East</title>
+  <style>
+    :root{
+      --bg:#0b0f14; --panel:#111927; --ink:#e9f3ff; --muted:#9fb3c8; --blue:#2a9dff; --red:#ff5f6d; --good:#2bd17e;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;background:radial-gradient(1200px 600px at 20% -10%, #132035, #0a1322 60%, #070d16);color:var(--ink);font:14px/1.4 system-ui,Segoe UI,Roboto,Helvetica,Arial}
+    header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #1d2736;background:linear-gradient(180deg,#0f1724,#0b111c)}
+    h1{margin:0;font-size:18px;letter-spacing:.4px}
+    .wrap{max-width:1100px;margin:0 auto;padding:14px}
+
+    .stage{position:relative;border:1px solid #1b2433;border-radius:16px;overflow:hidden;background:#09121e;box-shadow:0 8px 30px #0007}
+    .hud{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:10px 12px;border-bottom:1px solid #1b2535;background:linear-gradient(180deg,#0e1623,#0b111c)}
+    .btn{padding:8px 14px;border-radius:999px;border:1px solid #274161;background:#0f1b2d;color:#eaf2ff;cursor:pointer}
+    .btn.primary{background:linear-gradient(180deg,#1aa2ff,#1488ff);border-color:#1678ff}
+    .btn:disabled{opacity:.5;cursor:not-allowed}
+    .legend{display:flex;gap:14px;color:var(--muted)}
+    .dot{width:10px;height:10px;border-radius:50%}
+
+    /* Map area */
+    .map{position:relative; width:100%; height:520px;}
+    .half{position:absolute;inset:0}
+    .west{background:linear-gradient(90deg, rgba(42,157,255,.25), rgba(42,157,255,.05));clip-path:polygon(0 0,50% 0,50% 100%,0 100%)}
+    .east{background:linear-gradient(270deg, rgba(255,95,109,.25), rgba(255,95,109,.05));clip-path:polygon(50% 0,100% 0,100% 100%,50% 100%)}
+
+    /* Simple stylized globe */
+    svg{position:absolute;inset:0;width:100%;height:100%}
+    .grid{stroke:#1d2a3c;stroke-width:.8}
+    .coast{fill:#cfe2ff0f;stroke:#2a3550;stroke-width:1}
+
+    /* Rocket */
+    .rocket{position:absolute; width:22px; height:22px; background:linear-gradient(180deg,#ddd,#999); border-radius:4px; transform:translate(-50%,-50%) rotate(0deg); box-shadow:0 0 10px #fff8}
+    .rocket::after{content:""; position:absolute; left:50%; bottom:-10px; transform:translateX(-50%); width:4px; height:12px; background:linear-gradient(#ffaa00,#ff0000); border-radius:2px; filter:blur(1px)}
+    .trail{position:absolute; width:2px; background:linear-gradient(180deg,#fff,#9cf0); opacity:.8}
+
+    /* Explosion */
+    .explosion{position:absolute; width:12px; height:12px; border-radius:50%; background:#fff; opacity:.9; transform:translate(-50%,-50%) scale(.2); pointer-events:none}
+    @keyframes boom{ 0%{transform:translate(-50%,-50%) scale(.2); opacity:1} 70%{opacity:.6} 100%{transform:translate(-50%,-50%) scale(16); opacity:0} }
+
+    /* Game Over overlay */
+    .overlay{position:absolute; inset:0; display:none; align-items:center; justify-content:center; background:linear-gradient(#0008,#000c)}
+    .card{background:#0c1524;border:1px solid #203043; padding:22px 26px; border-radius:16px; text-align:center; box-shadow:0 10px 30px #0008}
+    .title{font-size:28px; letter-spacing:.5px; margin-bottom:10px}
+    .sub{color:var(--muted); margin-bottom:16px}
+
+    footer{max-width:1100px;margin:12px auto 24px;color:#8ea5c2}
+    ul{margin:6px 0 0 18px}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Shall We Play A Game? <span style="opacity:.7">— West vs East</span></h1>
+    <div style="color:#9fb3c8">Click <b>Start</b> to launch rockets simultaneously.</div>
+  </header>
+
+  <div class="wrap">
+    <div class="stage" id="stage">
+      <div class="hud">
+        <div class="legend">
+          <div class="dot" style="background:var(--blue)"></div><span>Blue = Western world</span>
+          <div class="dot" style="background:var(--red)"></div><span>Red = Eastern / former communist sphere</span>
+        </div>
+        <div>
+          <button class="btn primary" id="startBtn">Start</button>
+          <button class="btn" id="resetBtn">Reset</button>
+        </div>
+      </div>
+
+      <div class="map" id="map">
+        <div class="half west"></div>
+        <div class="half east"></div>
+
+        <!-- Stylized globe/world (not cartographically precise) -->
+        <svg viewBox="0 0 1200 520" preserveAspectRatio="xMidYMid slice" aria-label="stylized world map">
+          <!-- Graticule-like grid -->
+          <defs>
+            <pattern id="grid" width="60" height="60" patternUnits="userSpaceOnUse">
+              <path d="M60 0H0V60" class="grid" fill="none" />
+            </pattern>
+          </defs>
+          <rect x="0" y="0" width="1200" height="520" fill="url(#grid)" opacity="0.35"/>
+          <!-- "World oval" -->
+          <ellipse cx="600" cy="260" rx="540" ry="220" fill="#0b1628" stroke="#21324a" stroke-width="2"/>
+
+          <!-- Very rough continent silhouettes (aesthetic only) -->
+          <path class="coast" d="M180,240 C220,210 290,200 320,190 C340,170 380,155 420,160 C460,165 480,185 500,200 C520,215 520,235 500,250 C470,272 430,275 400,280 C360,290 300,295 260,285 C220,275 180,260 180,240 Z"/>
+          <path class="coast" d="M610,210 C640,200 690,200 720,210 C750,220 780,235 800,255 C820,275 835,292 845,308 C855,324 860,338 850,350 C840,362 815,365 795,360 C770,353 750,340 730,328 C690,303 660,280 640,255 C625,235 605,220 610,210 Z"/>
+          <path class="coast" d="M880,240 C905,235 940,240 970,250 C1000,260 1030,275 1045,295 C1060,315 1060,335 1040,345 C1020,355 990,352 965,345 C940,338 915,325 900,310 C885,295 875,275 875,260 C875,250 872,243 880,240 Z"/>
+          <path class="coast" d="M540,330 C560,320 585,320 600,328 C615,336 625,350 625,362 C625,374 615,384 600,388 C585,392 565,390 552,382 C539,374 530,360 532,346 C534,336 533,334 540,330 Z"/>
+        </svg>
+
+        <!-- Rockets will be injected here -->
+      </div>
+
+      <!-- Overlay -->
+      <div class="overlay" id="overlay">
+        <div class="card">
+          <div class="title">GAME OVER</div>
+          <div class="sub">Mutual strike detected. Would you like to play again?</div>
+          <button class="btn primary" id="againBtn">Play again</button>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <div><b>Note:</b> The colors indicate spheres for gameplay flavor only. Below are commonly referenced former communist states (historical list, non‑exhaustive):
+        <ul>
+          <li><b>USSR (former)</b> and its republics</li>
+          <li>Eastern Bloc: Poland, East Germany (GDR), Czechoslovakia, Hungary, Romania, Bulgaria, Albania, Yugoslavia</li>
+          <li>Asia: China, North Korea, Vietnam, Laos, Mongolia</li>
+          <li>Caribbean: Cuba</li>
+        </ul>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    const map = document.getElementById('map');
+    const startBtn = document.getElementById('startBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const overlay = document.getElementById('overlay');
+    const againBtn = document.getElementById('againBtn');
+
+    let animating = false;
+
+    function makeRocket(x,y,angle){
+      const r = document.createElement('div');
+      r.className = 'rocket';
+      r.style.left = x+"px"; r.style.top = y+"px"; r.style.transform = `translate(-50%,-50%) rotate(${angle}deg)`;
+      map.appendChild(r);
+      // trail element
+      const trail = document.createElement('div');
+      trail.className='trail'; map.appendChild(trail);
+      return {el:r, trail};
+    }
+
+    function explode(x,y){
+      const e = document.createElement('div');
+      e.className='explosion';
+      e.style.left = x+'px'; e.style.top=y+'px';
+      e.style.animation='boom 1200ms ease-out forwards';
+      map.appendChild(e);
+      setTimeout(()=>e.remove(), 1300);
+    }
+
+    function clearDynamic(){
+      map.querySelectorAll('.rocket,.trail,.explosion').forEach(n=>n.remove());
+    }
+
+    function reset(){
+      animating=false; startBtn.disabled=false; overlay.style.display='none';
+      clearDynamic();
+    }
+
+    function start(){
+      if(animating) return; animating=true; startBtn.disabled=true; overlay.style.display='none'; clearDynamic();
+
+      const rect = map.getBoundingClientRect();
+      const hmid = rect.height*0.52; // a bit above center for style
+
+      // launch points (left from West towards East, and right from East towards West)
+      const leftStart = {x: rect.width*0.08, y: hmid};
+      const rightStart= {x: rect.width*0.92, y: hmid+10};
+
+      const leftTarget = {x: rect.width*0.92-10, y: hmid+8};
+      const rightTarget= {x: rect.width*0.08+10, y: hmid+2};
+
+      const rL = makeRocket(leftStart.x, leftStart.y, 0);
+      const rR = makeRocket(rightStart.x, rightStart.y, 180);
+
+      const duration = 2400; // ms
+      const t0 = performance.now();
+
+      function tick(now){
+        const p = Math.min(1, (now - t0)/duration);
+        // interpolate positions
+        const lx = leftStart.x + (leftTarget.x - leftStart.x)*p;
+        const ly = leftStart.y + (leftTarget.y - leftStart.y)*p;
+        const rx = rightStart.x + (rightTarget.x - rightStart.x)*p;
+        const ry = rightStart.y + (rightTarget.y - rightStart.y)*p;
+
+        rL.el.style.left = lx+'px'; rL.el.style.top = ly+'px';
+        rR.el.style.left = rx+'px'; rR.el.style.top = ry+'px';
+
+        // trails
+        rL.trail.style.left = (leftStart.x)+'px';
+        rL.trail.style.top  = (leftStart.y)+'px';
+        rL.trail.style.height = Math.max(2, Math.abs(ly-leftStart.y))+'px';
+        rL.trail.style.transform = `translateY(-50%) rotate(90deg)`;
+
+        rR.trail.style.left = (rightTarget.x)+'px';
+        rR.trail.style.top  = (rightTarget.y)+'px';
+        rR.trail.style.height = Math.max(2, Math.abs(ry-rightTarget.y))+'px';
+        rR.trail.style.transform = `translateY(-50%) rotate(90deg)`;
+
+        if(p<1){ requestAnimationFrame(tick); }
+        else {
+          // simultaneous impacts
+          explode(leftTarget.x,leftTarget.y);
+          explode(rightTarget.x,rightTarget.y);
+          setTimeout(()=>{ overlay.style.display='flex'; animating=false; }, 1200);
+        }
+      }
+      requestAnimationFrame(tick);
+    }
+
+    startBtn.addEventListener('click', start);
+    resetBtn.addEventListener('click', reset);
+    againBtn.addEventListener('click', ()=>{ reset(); setTimeout(start,50) });
+
+    // Initial layout reset to ensure clean state when opening the page via GitHub Pages
+    window.addEventListener('resize', ()=>{ if(!animating){ clearDynamic(); } });
+  </script>
+</body>
+</html>
